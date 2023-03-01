@@ -1,0 +1,15 @@
+FROM python:3
+
+WORKDIR /usr/src/app
+
+# install other requirements
+#COPY requirements.txt ./
+#RUN pip install --no-cache-dir -r requirements.txt
+
+# copy python app
+COPY MyPythonApp.py .
+
+# expose port
+EXPOSE 443
+
+CMD [ "python", "./MyPythonApp.py" ]
