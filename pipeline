@@ -2,7 +2,7 @@ pipeline {
     agent any
     environment {
         DOCKER_HUB_CREDENTIALS = credentials('csi_w3_user') /* Jenkins credentials type of usernamePassword of docker hub */
-        K8S_DEPLOYMENT_PATH = "/home/kubadmin/deployment.yaml"
+        K8S_DEPLOYMENT_PATH = "/home/kubadmin/deploy.yaml"
         K8S_SSH_HOST = "9.151.213.35"
         K8S_SSH_USERNAME = "kubadmin"
         K8S_SSH_PRIVATE_KEY = credentials('k8s-ssh-key')
