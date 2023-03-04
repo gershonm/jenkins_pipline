@@ -1,20 +1,21 @@
 pipeline {
     agent any
     environment {
-        K8S_DEPLOYMENT_NAME = "your-kubernetes-deployment-name"
-        K8S_NAMESPACE = "your-kubernetes-namespace"
+        DOCKER_HUB_CREDENTIALS = credentials('csi_w3_user') /* Jenkins credentials type of usernamePassword of docker hub */
+        K8S_DEPLOYMENT_PATH = "/home/kubadmin/deployment.yaml"
+        K8S_SSH_HOST = "9.151.213.35"
+        K8S_SSH_USERNAME = "kubadmin"
+        K8S_SSH_PRIVATE_KEY = credentials('k8s-ssh-key')
         OUTPUT_FILE = 'deploy-python-app.txt'
     }
     parameters {
-        string(name: 'DOCKER_HUB_CREDENTIALS_ID', defaultValue: "docker-hub")
-        //string(name: 'DOCKER_HUB_CREDENTIALS_ID', defaultValue: "docker-hub", description: "the nexus credential saved in Jenkins ")
         string(name: 'DOCKER_FILE', defaultValue: "docker_file")
-        string(name: 'DOCKER_IMAGE', defaultValue: "gershon-app:v1.0")
-        string(name: 'DOCKER_REGISTRY', defaultValue: "stg-artifactory.xiv.ibm.com:5030")
+        string(name: 'DOCKER_IMAGE', defaultValue: "gershon/gershon-app")
+        string(name: 'DOCKER_REGISTRY', defaultValue: "stg-artifactory.xiv.ibm.com:5030", description: "the nexus registry  ")
 
     }
     options {
-        //timestamps()
+        timestamps()
         ansiColor('xterm')
     }
     stages {
@@ -27,9 +28,8 @@ pipeline {
         stage('Build Docker image') {
             steps {
                 script {
-                    sh 'pwd'
-                    sh 'ls -l'
                     sh 'docker build -f ${DOCKER_FILE} -t ${DOCKER_IMAGE} .'
+                    sh 'docker tag  ${DOCKER_IMAGE} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}'
                 }
                 echo 'Build image Completed'
             }
@@ -37,43 +37,25 @@ pipeline {
         stage('Push Docker image') {
             steps {
                 script {
-                    withCredentials([string(credentialsId: "${DOCKER_HUB_CREDENTIALS_ID}", variable: 'DOCKER_HUB_CREDENTIALS'), usernamePassword(credentialsId: "${DOCKER_HUB_CREDENTIALS_ID}", usernameVariable: 'DOCKER_HUB_CREDENTIALS_USR', passwordVariable: 'DOCKER_HUB_CREDENTIALS_PSW')]) {
-                        sh "docker login -u ${env.DOCKER_HUB_CREDENTIALS_USR} -p ${env.DOCKER_HUB_CREDENTIALS_PSW}"
-                        sh "docker push ${DOCKER_IMAGE}"
+                        sh 'echo $DOCKER_HUB_CREDENTIALS_PSW |docker login -u $DOCKER_HUB_CREDENTIALS_USR --password-stdin ${DOCKER_REGISTRY}'
+                        //sh 'docker login -u $DOCKER_HUB_CREDENTIALS_USR -p $DOCKER_HUB_CREDENTIALS_PSW ${DOCKER_REGISTRY}'
+                        sh 'docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}'
+                    echo 'Push Docker image Completed'
+                }
+            }
+        }
+         stage('Deploy to Kubernetes') {
+            steps {
+                script {
+                    sshagent(['${env.K8S_SSH_PRIVATE_KEY}']) {
+                        sh "scp -o StrictHostKeyChecking=no ${env.K8S_DEPLOYMENT_PATH} ${env.K8S_SSH_USERNAME}@${env.K8S_SSH_HOST}:${env.K8S_DEPLOYMENT_PATH}"
+                        sh "ssh -o StrictHostKeyChecking=no ${env.K8S_SSH_USERNAME}@${env.K8S_SSH_HOST} 'kubectl apply -f ${env.K8S_DEPLOYMENT_PATH}'"
                     }
                 }
             }
         }
-        stage('Deploy to Kubernetes') {
-            steps {
-                script {
-                    def k8s_deployment_yaml = """
-                        apiVersion: apps/v1
-                        kind: Deployment
-                        metadata:
-                          name: ${K8S_DEPLOYMENT_NAME}
-                          namespace: ${K8S_NAMESPACE}
-                        spec:
-                          replicas: 1
-                          selector:
-                            matchLabels:
-                              app: ${K8S_DEPLOYMENT_NAME}
-                          template:
-                            metadata:
-                              labels:
-                                app: ${K8S_DEPLOYMENT_NAME}
-                            spec:
-                              containers:
-                                - name: ${K8S_DEPLOYMENT_NAME}
-                                  image: ${DOCKER_IMAGE}
-                                  ports:
-                                    - containerPort: 8080
-                      """
-                    sh "echo '${k8s_deployment_yaml}' | kubectl apply -f -"
-                }
-            }
-        }
     }
+
     post {
         always {
             sh 'docker logout ${DOCKER_REGISTRY}'

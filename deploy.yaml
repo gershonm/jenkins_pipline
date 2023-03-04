@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gershon-deployment
+  labels:
+    gershon: python_app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: gershon-app
+  template:
+    metadata:
+      labels:
+        app: gershon-app
+    spec:
+      containers:
+      - name: gershon-app
+        image: "stg-artifactory.xiv.ibm.com:5030/gershon/gershon-app"
+        ports:
+        - containerPort: 80
